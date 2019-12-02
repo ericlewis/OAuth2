@@ -40,6 +40,9 @@ open class OAuth2Authorizer: OAuth2AuthorizerUI {
 	/// Used to store the `SFSafariViewControllerDelegate`.
 	private var safariViewDelegate: AnyObject?
 	
+	/// Used to store the `ASWebAuthenticationPresentationContextProviding`.
+	private var webAuthenticationPresentationContextProvider: AnyObject?
+	
 	/// Used to store the authentication session.
 	private var authenticationSession: AnyObject?
 	
@@ -153,7 +156,14 @@ open class OAuth2Authorizer: OAuth2AuthorizerUI {
 #else
 		if #available(iOS 12, *) {
 			authenticationSession = ASWebAuthenticationSession(url: url, callbackURLScheme: redirect, completionHandler: completionHandler)
-			return (authenticationSession as! ASWebAuthenticationSession).start()
+			let session = (authenticationSession as! ASWebAuthenticationSession)
+			
+			if #available(iOS 13.0, *) {
+				webAuthenticationPresentationContextProvider = OAuth2ASWebAuthenticationPresentationContextProvider(authorizer: self)
+				session.presentationContextProvider = (webAuthenticationPresentationContextProvider as? ASWebAuthenticationPresentationContextProviding)
+			}
+			
+			return session.start()
 		} else {
 			authenticationSession = SFAuthenticationSession(url: url, callbackURLScheme: redirect, completionHandler: completionHandler)
 			return (authenticationSession as! SFAuthenticationSession).start()
@@ -272,6 +282,23 @@ open class OAuth2Authorizer: OAuth2AuthorizerUI {
 		controller.present(navi, animated: true)
 		
 		return web
+	}
+}
+
+/**
+A custom `ASWebAuthenticationPresentationContextProviding` that we use to provide the window based on the authorizationContext
+*/
+class OAuth2ASWebAuthenticationPresentationContextProvider: NSObject, ASWebAuthenticationPresentationContextProviding {
+	
+	let authorizer: OAuth2Authorizer
+	
+	init(authorizer: OAuth2Authorizer) {
+		self.authorizer = authorizer
+	}
+	
+	@available(iOS 12.0, *)
+	func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+		return (authorizer.oauth2.authConfig.authorizeContext as? UIViewController)?.view.window ?? ASPresentationAnchor()
 	}
 }
 
